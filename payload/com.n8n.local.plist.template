@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>__LAUNCHAGENT_LABEL__</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>__INSTALL_DIR__/bin/launch-n8n.sh</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>__INSTALL_DIR__/node/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <key>N8N_PORT</key>
+        <string>__N8N_PORT__</string>
+        <key>N8N_HOST</key>
+        <string>__N8N_HOST__</string>
+        <key>N8N_DIAGNOSTICS_ENABLED</key>
+        <string>false</string>
+        <key>N8N_VERSION_NOTIFICATIONS_ENABLED</key>
+        <string>false</string>
+        <key>N8N_SECURE_COOKIE</key>
+        <string>false</string>
+        <key>DB_SQLITE_POOL_SIZE</key>
+        <string>4</string>
+        <key>N8N_USER_FOLDER</key>
+        <string>__HOME__</string>
+        <key>EXECUTIONS_DATA_PRUNE</key>
+        <string>true</string>
+        <key>EXECUTIONS_DATA_MAX_AGE</key>
+        <string>336</string>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>__INSTALL_DIR__/logs/n8n.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>__INSTALL_DIR__/logs/n8n.log</string>
+
+    <key>WorkingDirectory</key>
+    <string>__INSTALL_DIR__</string>
+</dict>
+</plist>
