@@ -3,7 +3,7 @@
 # All scripts source this file for shared constants.
 
 NODE_VERSION="22.16.0"
-N8N_VERSION="1.77.0"
+N8N_VERSION="2.7.4"
 N8N_PORT=5678
 N8N_HOST="localhost"
 
