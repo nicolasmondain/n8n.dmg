@@ -39,6 +39,25 @@ warn()    { echo -e "${YELLOW}⚠${NC}  $*"; }
 err()     { echo -e "${RED}✖${NC}  $*" >&2; }
 success() { echo -e "${GREEN}✔${NC}  $*"; }
 
+# Verify a path is a real directory (not a symlink to somewhere unexpected)
+verify_dir_safe() {
+    local dir="$1"
+    local expected_parent="$2"
+    if [[ -L "$dir" ]]; then
+        local target
+        target=$(readlink "$dir")
+        err "Refusing to operate: ${dir} is a symlink to ${target}"
+        exit 1
+    fi
+    # Verify the resolved path starts with the expected parent
+    local resolved
+    resolved=$(cd "$dir" 2>/dev/null && pwd -P)
+    if [[ -n "$expected_parent" && "$resolved" != "${expected_parent}"* ]]; then
+        err "Refusing to operate: ${dir} resolves to ${resolved}, expected under ${expected_parent}"
+        exit 1
+    fi
+}
+
 # ─── Cleanup on failure ──────────────────────────────────────────────────────
 
 CLEANUP_NEEDED=false
@@ -49,7 +68,10 @@ cleanup() {
         # Stop service if it was started
         launchctl bootout "gui/${GUI_UID}/${LAUNCHAGENT_LABEL}" 2>/dev/null || true
         rm -f "$LAUNCHAGENT_PLIST"
-        rm -rf "$INSTALL_DIR"
+        # Only rm -rf if it is not a symlink
+        if [[ -d "$INSTALL_DIR" && ! -L "$INSTALL_DIR" ]]; then
+            rm -rf "$INSTALL_DIR"
+        fi
         err "Cleanup complete. Please try again."
     fi
 }
@@ -128,6 +150,12 @@ info "n8n will run on port ${CYAN}${N8N_PORT}${NC}"
 UPGRADING=false
 
 if [[ -d "$INSTALL_DIR" ]]; then
+    # Refuse to proceed if INSTALL_DIR is a symlink
+    if [[ -L "$INSTALL_DIR" ]]; then
+        err "${INSTALL_DIR} is a symlink — refusing to upgrade. Remove it manually first."
+        exit 1
+    fi
+
     if [[ -f "${INSTALL_DIR}/.version" ]]; then
         EXISTING_VERSION=$(cat "${INSTALL_DIR}/.version")
         warn "Existing n8n installation found (${EXISTING_VERSION})"
@@ -164,16 +192,19 @@ log "Installing to ${INSTALL_DIR}..."
 
 # Create directory structure
 mkdir -p "${INSTALL_DIR}/bin"
-mkdir -p "${INSTALL_DIR}/logs"
+mkdir -p -m 700 "${INSTALL_DIR}/logs"
 mkdir -p "${INSTALL_DIR}/node"
 mkdir -p "${INSTALL_DIR}/n8n"
 
-# Copy Node.js
+# Verify the install dir is not a symlink after creation
+verify_dir_safe "$INSTALL_DIR" "${HOME}"
+
+# Copy Node.js (--copy-links dereferences symlinks from the DMG source)
 log "Copying Node.js..."
-rsync -a --delete "${DMG_ROOT}/${NODE_SRC}/" "${INSTALL_DIR}/node/"
+rsync -a --copy-links --delete "${DMG_ROOT}/${NODE_SRC}/" "${INSTALL_DIR}/node/"
 success "Node.js installed"
 
-# Copy n8n
+# Copy n8n (preserve symlinks in node_modules/.bin — they use relative paths)
 log "Copying n8n..."
 rsync -a --delete "${DMG_ROOT}/${N8N_SRC}/" "${INSTALL_DIR}/n8n/"
 success "n8n installed"
@@ -183,25 +214,31 @@ log "Installing helper scripts..."
 cp "${DMG_ROOT}/.payload/launch-n8n.sh" "${INSTALL_DIR}/bin/"
 cp "${DMG_ROOT}/.payload/n8n-dmg.sh"    "${INSTALL_DIR}/bin/"
 cp "${DMG_ROOT}/.payload/uninstall.sh"   "${INSTALL_DIR}/"
-chmod +x "${INSTALL_DIR}/bin/"*.sh
+chmod +x "${INSTALL_DIR}/bin/launch-n8n.sh" "${INSTALL_DIR}/bin/n8n-dmg.sh"
 chmod +x "${INSTALL_DIR}/uninstall.sh"
 
 # Copy native n8n app
 if [[ -d "${DMG_ROOT}/.payload/n8n.app" ]]; then
     cp -R "${DMG_ROOT}/.payload/n8n.app" "${INSTALL_DIR}/n8n.app"
-    xattr -cr "${INSTALL_DIR}/n8n.app" 2>/dev/null || true
     # Symlink to ~/Applications for Spotlight discovery
     mkdir -p "${HOME}/Applications"
     ln -sf "${INSTALL_DIR}/n8n.app" "${HOME}/Applications/n8n.app"
+    # Add to Dock (only if not already present)
+    if ! defaults read com.apple.dock persistent-apps 2>/dev/null | grep -q "n8n.app"; then
+        defaults write com.apple.dock persistent-apps -array-add \
+            "<dict><key>tile-data</key><dict><key>file-data</key><dict><key>_CFURLString</key><string>${INSTALL_DIR}/n8n.app</string><key>_CFURLStringType</key><integer>0</integer></dict></dict></dict>"
+        killall Dock
+    fi
     success "n8n app installed"
 fi
 
 success "Scripts installed"
 
-# Write version and port files
-N8N_INSTALLED_VERSION=$("${INSTALL_DIR}/node/bin/node" "${INSTALL_DIR}/n8n/node_modules/.bin/n8n" --version 2>/dev/null || echo "unknown")
+# Write version and port files with restrictive permissions
+N8N_INSTALLED_VERSION=$("${INSTALL_DIR}/node/bin/node" -e "process.stdout.write(require('${INSTALL_DIR}/n8n/node_modules/n8n/package.json').version)" 2>/dev/null || echo "unknown")
 echo "$N8N_INSTALLED_VERSION" > "${INSTALL_DIR}/.version"
 echo "$N8N_PORT" > "${INSTALL_DIR}/.port"
+chmod 600 "${INSTALL_DIR}/.version" "${INSTALL_DIR}/.port"
 
 # ─── LaunchAgent ──────────────────────────────────────────────────────────────
 
@@ -228,7 +265,7 @@ launchctl bootstrap "gui/${GUI_UID}" "$LAUNCHAGENT_PLIST"
 info "Waiting for n8n to start..."
 SECONDS_WAITED=0
 while (( SECONDS_WAITED < POLL_TIMEOUT )); do
-    if curl -sf "http://localhost:${N8N_PORT}/healthz" -o /dev/null 2>/dev/null; then
+    if curl -sf "http://127.0.0.1:${N8N_PORT}/healthz" -o /dev/null 2>/dev/null; then
         break
     fi
     sleep 1
@@ -237,8 +274,8 @@ while (( SECONDS_WAITED < POLL_TIMEOUT )); do
 done
 echo ""
 
-if curl -sf "http://localhost:${N8N_PORT}/healthz" -o /dev/null 2>/dev/null; then
-    success "n8n is running on http://localhost:${N8N_PORT}"
+if curl -sf "http://127.0.0.1:${N8N_PORT}/healthz" -o /dev/null 2>/dev/null; then
+    success "n8n is running on port ${N8N_PORT}"
 else
     warn "n8n did not respond within ${POLL_TIMEOUT}s"
     warn "It may still be starting. Check logs with: n8n-dmg logs"
@@ -249,13 +286,17 @@ fi
 ALIAS_LINE="alias n8n-dmg=\"${INSTALL_DIR}/bin/n8n-dmg.sh\""
 ZSHRC="${HOME}/.zshrc"
 
-if [[ -f "$ZSHRC" ]] && grep -qF "alias n8n-dmg=" "$ZSHRC"; then
-    # Update existing alias
-    sed -i '' "s|alias n8n-dmg=.*|${ALIAS_LINE}|" "$ZSHRC"
-else
-    echo "" >> "$ZSHRC"
-    echo "# n8n local — CLI helper" >> "$ZSHRC"
-    echo "$ALIAS_LINE" >> "$ZSHRC"
+if [[ -f "$ZSHRC" ]]; then
+    if grep -qF "alias n8n-dmg=" "$ZSHRC"; then
+        # Update existing alias atomically via temp file
+        ZSHRC_TMP=$(mktemp "${ZSHRC}.XXXXXX")
+        sed "s|alias n8n-dmg=.*|${ALIAS_LINE}|" "$ZSHRC" > "$ZSHRC_TMP"
+        mv "$ZSHRC_TMP" "$ZSHRC"
+    else
+        echo "" >> "$ZSHRC"
+        echo "# n8n local — CLI helper" >> "$ZSHRC"
+        echo "$ALIAS_LINE" >> "$ZSHRC"
+    fi
 fi
 
 # ─── Done ─────────────────────────────────────────────────────────────────────
@@ -267,7 +308,7 @@ echo -e "${GREEN}${BOLD}╔═════════════════�
 echo -e "${GREEN}${BOLD}║       Installation complete!         ║${NC}"
 echo -e "${GREEN}${BOLD}╚══════════════════════════════════════╝${NC}"
 echo ""
-info "n8n is running at: ${CYAN}http://localhost:${N8N_PORT}${NC}"
+info "n8n is running on port ${CYAN}${N8N_PORT}${NC}"
 info ""
 info "Commands (open a new terminal or run: source ~/.zshrc):"
 info "  ${BOLD}n8n-dmg start${NC}    Start n8n"
@@ -285,14 +326,15 @@ echo ""
 if [[ -d "${INSTALL_DIR}/n8n.app" ]]; then
     open "${INSTALL_DIR}/n8n.app"
 else
-    open "http://localhost:${N8N_PORT}"
+    open "http://127.0.0.1:${N8N_PORT}"
 fi
 
-# Show success dialog
+# Show success dialog (sanitize version to prevent osascript injection)
+SAFE_VERSION=$(echo "$N8N_INSTALLED_VERSION" | tr -cd '[:alnum:].-')
 if $UPGRADING; then
-    DIALOG_MSG="n8n has been upgraded to ${N8N_INSTALLED_VERSION}.\n\nRunning at http://localhost:${N8N_PORT}"
+    DIALOG_MSG="n8n has been upgraded to ${SAFE_VERSION}.\\n\\nRunning on port ${N8N_PORT}"
 else
-    DIALOG_MSG="n8n has been installed successfully!\n\nRunning at http://localhost:${N8N_PORT}\n\nUse 'n8n-dmg' to manage the service."
+    DIALOG_MSG="n8n has been installed successfully!\\n\\nRunning on port ${N8N_PORT}\\n\\nUse n8n-dmg to manage the service."
 fi
 
 osascript -e "display dialog \"${DIALOG_MSG}\" with title \"n8n Installer\" buttons {\"OK\"} default button \"OK\"" &>/dev/null &
