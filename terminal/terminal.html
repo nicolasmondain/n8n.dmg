@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Terminal</title>
+<link rel="stylesheet" href="xterm/xterm.css">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: #1e1e2e; /* Catppuccin Mocha base */
+  }
+  #terminal {
+    width: 100%; height: 100%;
+  }
+  /* Hide scrollbar — xterm handles its own */
+  .xterm-viewport::-webkit-scrollbar { display: none; }
+</style>
+</head>
+<body>
+<div id="terminal"></div>
+<script src="xterm/xterm.js"></script>
+<script src="xterm/xterm-addon-fit.js"></script>
+<script>
+(function() {
+  "use strict";
+
+  // Catppuccin Mocha palette
+  var theme = {
+    background:   "#1e1e2e",
+    foreground:   "#cdd6f4",
+    cursor:       "#f5e0dc",
+    cursorAccent: "#1e1e2e",
+    selectionBackground: "rgba(88, 91, 112, 0.5)",
+    black:   "#45475a",
+    red:     "#f38ba8",
+    green:   "#a6e3a1",
+    yellow:  "#f9e2af",
+    blue:    "#89b4fa",
+    magenta: "#f5c2e7",
+    cyan:    "#94e2d5",
+    white:   "#bac2de",
+    brightBlack:   "#585b70",
+    brightRed:     "#f38ba8",
+    brightGreen:   "#a6e3a1",
+    brightYellow:  "#f9e2af",
+    brightBlue:    "#89b4fa",
+    brightMagenta: "#f5c2e7",
+    brightCyan:    "#94e2d5",
+    brightWhite:   "#a6adc8"
+  };
+
+  var term = new Terminal({
+    theme: theme,
+    fontFamily: "Menlo, Monaco, 'Courier New', monospace",
+    fontSize: 13,
+    cursorBlink: true,
+    cursorStyle: "block",
+    allowProposedApi: true,
+    scrollback: 5000
+  });
+
+  var fitAddon = new FitAddon.FitAddon();
+  term.loadAddon(fitAddon);
+  term.open(document.getElementById("terminal"));
+  fitAddon.fit();
+
+  // Send keystrokes to Swift
+  term.onData(function(data) {
+    window.webkit.messageHandlers.terminal.postMessage({
+      type: "input",
+      data: data
+    });
+  });
+
+  // Report resizes to Swift
+  var resizeObserver = new ResizeObserver(function() {
+    fitAddon.fit();
+    window.webkit.messageHandlers.terminal.postMessage({
+      type: "resize",
+      cols: term.cols,
+      rows: term.rows
+    });
+  });
+  resizeObserver.observe(document.getElementById("terminal"));
+
+  // Called from Swift to push PTY output
+  window.terminalWrite = function(base64) {
+    var binary = atob(base64);
+    var bytes = new Uint8Array(binary.length);
+    for (var i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    term.write(bytes);
+  };
+
+  // Called from Swift to force a fit (e.g. after panel resize)
+  window.terminalFit = function() {
+    fitAddon.fit();
+    return JSON.stringify({ cols: term.cols, rows: term.rows });
+  };
+
+  // Signal ready
+  window.webkit.messageHandlers.terminal.postMessage({ type: "ready" });
+})();
+</script>
+</body>
+</html>

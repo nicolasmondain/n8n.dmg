@@ -1,5 +1,5 @@
 # Makefile — n8n macOS DMG Installer build orchestrator
-.PHONY: all check-deps download-node bundle-n8n fetch-icon app-bundle manager-app dmg clean
+.PHONY: all check-deps download-node bundle-n8n fetch-icon app-bundle terminal-assets manager-app dmg clean
 
 SHELL := /bin/bash
 
@@ -30,7 +30,10 @@ fetch-icon: check-deps
 app-bundle: check-deps fetch-icon
 	@bash scripts/create-app-bundle.sh
 
-manager-app: check-deps fetch-icon
+terminal-assets: check-deps
+	@bash scripts/build-terminal-assets.sh
+
+manager-app: check-deps fetch-icon terminal-assets
 	@bash scripts/build-manager-app.sh
 
 dmg: bundle-n8n app-bundle manager-app

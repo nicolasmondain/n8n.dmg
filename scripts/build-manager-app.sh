@@ -15,12 +15,20 @@ NC='\033[0m'
 log()  { echo -e "${GREEN}[manager-app]${NC} $*"; }
 warn() { echo -e "${YELLOW}[manager-app]${NC} $*"; }
 
-SWIFT_SRC="${PROJECT_ROOT}/swift/N8nManager.swift"
+SWIFT_DIR="${PROJECT_ROOT}/swift"
+SWIFT_SOURCES=(
+    "${SWIFT_DIR}/main.swift"
+    "${SWIFT_DIR}/N8nManager.swift"
+    "${SWIFT_DIR}/TerminalManager.swift"
+    "${SWIFT_DIR}/TerminalPanelView.swift"
+)
+BRIDGING_HEADER="${SWIFT_DIR}/pty_shim.h"
 APP_DIR="${PROJECT_ROOT}/${BUILD_DIR}/n8n.app"
 CONTENTS="${APP_DIR}/Contents"
 MACOS="${CONTENTS}/MacOS"
 RESOURCES="${CONTENTS}/Resources"
 ICON_FILE="${PROJECT_ROOT}/${BUILD_DIR}/n8n.icns"
+TERMINAL_RESOURCES="${PROJECT_ROOT}/${BUILD_DIR}/terminal-resources"
 
 # Skip if already built
 if [[ -x "${MACOS}/N8nManager" ]]; then
@@ -28,8 +36,15 @@ if [[ -x "${MACOS}/N8nManager" ]]; then
     exit 0
 fi
 
-if [[ ! -f "$SWIFT_SRC" ]]; then
-    warn "Swift source not found at ${SWIFT_SRC}"
+for src in "${SWIFT_SOURCES[@]}"; do
+    if [[ ! -f "$src" ]]; then
+        warn "Swift source not found: ${src}"
+        exit 1
+    fi
+done
+
+if [[ ! -f "$BRIDGING_HEADER" ]]; then
+    warn "Bridging header not found: ${BRIDGING_HEADER}"
     exit 1
 fi
 
@@ -43,15 +58,17 @@ mkdir -p "$MACOS" "$RESOURCES"
 log "  Compiling arm64..."
 swiftc -O \
     -target arm64-apple-macosx12.0 \
+    -import-objc-header "$BRIDGING_HEADER" \
     -o "${PROJECT_ROOT}/${BUILD_DIR}/N8nManager-arm64" \
-    "$SWIFT_SRC"
+    "${SWIFT_SOURCES[@]}"
 
 # Compile for x86_64
 log "  Compiling x86_64..."
 swiftc -O \
     -target x86_64-apple-macosx12.0 \
+    -import-objc-header "$BRIDGING_HEADER" \
     -o "${PROJECT_ROOT}/${BUILD_DIR}/N8nManager-x64" \
-    "$SWIFT_SRC"
+    "${SWIFT_SOURCES[@]}"
 
 # Create universal binary
 log "  Creating universal binary..."
@@ -102,6 +119,14 @@ PLIST
 if [[ -f "$ICON_FILE" ]]; then
     cp "$ICON_FILE" "${RESOURCES}/n8n.icns"
     log "  Icon embedded"
+fi
+
+# Copy terminal resources
+if [[ -d "$TERMINAL_RESOURCES" ]]; then
+    cp -R "$TERMINAL_RESOURCES" "${RESOURCES}/terminal-resources"
+    log "  Terminal resources embedded"
+else
+    warn "Terminal resources not found at ${TERMINAL_RESOURCES} — terminal will be unavailable"
 fi
 
 # Report binary info

@@ -7,6 +7,29 @@ import Cocoa
 import WebKit
 import Foundation
 
+// MARK: - Process Helper (no shell interpretation)
+
+/// Runs a command directly without going through /bin/bash -c.
+/// All arguments are passed as an explicit array, eliminating shell injection risks.
+@discardableResult
+func run(_ executable: String, _ arguments: [String] = []) -> (output: String, exitCode: Int32) {
+    let process = Process()
+    let pipe = Pipe()
+    process.executableURL = URL(fileURLWithPath: executable)
+    process.arguments = arguments
+    process.standardOutput = pipe
+    process.standardError = pipe
+    do {
+        try process.run()
+        process.waitUntilExit()
+    } catch {
+        return ("", -1)
+    }
+    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+    let output = String(data: data, encoding: .utf8) ?? ""
+    return (output, process.terminationStatus)
+}
+
 // MARK: - Service Manager
 
 class ServiceManager {
@@ -30,22 +53,28 @@ class ServiceManager {
     func readPort() -> Int {
         let path = installDir + "/.port"
         guard let content = try? String(contentsOfFile: path, encoding: .utf8) else { return 5678 }
-        return Int(content.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 5678
+        let port = Int(content.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 5678
+        guard port >= 1 && port <= 65535 else { return 5678 }
+        return port
     }
 
     func readVersion() -> String {
         let path = installDir + "/.version"
         guard let content = try? String(contentsOfFile: path, encoding: .utf8) else { return "unknown" }
-        return content.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Only allow version-like characters (digits, dots, dashes, alphanumeric)
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: ".-"))
+        guard trimmed.unicodeScalars.allSatisfy({ allowed.contains($0) }) else { return "unknown" }
+        return trimmed
     }
 
     func isLoaded() -> Bool {
-        let (_, exit) = shell("launchctl print gui/\(guiUID)/\(launchAgentLabel)")
+        let (_, exit) = run("/bin/launchctl", ["print", "gui/\(guiUID)/\(launchAgentLabel)"])
         return exit == 0
     }
 
     func getPid() -> Int {
-        let (output, exit) = shell("launchctl print gui/\(guiUID)/\(launchAgentLabel)")
+        let (output, exit) = run("/bin/launchctl", ["print", "gui/\(guiUID)/\(launchAgentLabel)"])
         guard exit == 0 else { return 0 }
         guard let range = output.range(of: "pid = \\d+", options: .regularExpression) else { return 0 }
         let match = String(output[range])
@@ -56,25 +85,25 @@ class ServiceManager {
 
     func isPortListening() -> Bool {
         let port = readPort()
-        let (_, exit) = shell("lsof -i :\(port) -sTCP:LISTEN")
+        let (_, exit) = run("/usr/sbin/lsof", ["-i", ":\(port)", "-sTCP:LISTEN"])
         return exit == 0
     }
 
     func isReady() -> Bool {
         let port = readPort()
-        let (_, exit) = shell("curl -sf http://localhost:\(port)/healthz -o /dev/null")
+        let (_, exit) = run("/usr/bin/curl", ["-sf", "http://127.0.0.1:\(port)/healthz", "-o", "/dev/null"])
         return exit == 0
     }
 
     func start() {
         if !isLoaded() {
-            _ = shell("launchctl bootstrap gui/\(guiUID) \"\(plistPath)\"")
+            _ = run("/bin/launchctl", ["bootstrap", "gui/\(guiUID)", plistPath])
         }
     }
 
     func stop() {
         if isLoaded() {
-            _ = shell("launchctl bootout gui/\(guiUID)/\(launchAgentLabel)")
+            _ = run("/bin/launchctl", ["bootout", "gui/\(guiUID)/\(launchAgentLabel)"])
         }
     }
 
@@ -82,27 +111,8 @@ class ServiceManager {
         guard FileManager.default.fileExists(atPath: logFile) else {
             return "(no log file found)"
         }
-        let (output, _) = shell("tail -n \(lines) \"\(logFile)\"")
+        let (output, _) = run("/usr/bin/tail", ["-n", "\(lines)", logFile])
         return output
-    }
-
-    @discardableResult
-    private func shell(_ command: String) -> (output: String, exitCode: Int32) {
-        let process = Process()
-        let pipe = Pipe()
-        process.executableURL = URL(fileURLWithPath: "/bin/bash")
-        process.arguments = ["-c", command]
-        process.standardOutput = pipe
-        process.standardError = pipe
-        do {
-            try process.run()
-            process.waitUntilExit()
-        } catch {
-            return ("", -1)
-        }
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        let output = String(data: data, encoding: .utf8) ?? ""
-        return (output, process.terminationStatus)
     }
 }
 
@@ -119,11 +129,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     var statusItem: NSTextField!
     var pollTimer: Timer?
     var startupTimer: Timer?
+    var allowedPort: Int = 5678
+
+    // Terminal panel
+    var terminalPanel: TerminalPanelView?
+    var terminalToggleButton: NSButton!
+    var terminalVisible = false
 
     // n8n pink
     let n8nPink = NSColor(red: 0.918, green: 0.294, blue: 0.443, alpha: 1.0)
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        allowedPort = serviceManager.readPort()
         setupMenuBar()
         buildWindow()
         ensureServiceRunning()
@@ -171,6 +188,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         viewMenu.addItem(withTitle: "Reload", action: #selector(reloadPage), keyEquivalent: "r")
         viewMenu.addItem(withTitle: "Back", action: #selector(goBack), keyEquivalent: "[")
         viewMenu.addItem(withTitle: "Forward", action: #selector(goForward), keyEquivalent: "]")
+        viewMenu.addItem(NSMenuItem.separator())
+        viewMenu.addItem(withTitle: "Toggle Terminal", action: #selector(toggleTerminal), keyEquivalent: "t")
         viewMenuItem.submenu = viewMenu
         mainMenu.addItem(viewMenuItem)
 
@@ -230,13 +249,37 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
 
         // WebView
         let config = WKWebViewConfiguration()
+        #if DEBUG
         config.preferences.setValue(true, forKey: "developerExtrasEnabled")
+        #endif
 
         webView = WKWebView(frame: NSRect(x: 0, y: 0, width: contentView.bounds.width, height: contentView.bounds.height - 32), configuration: config)
         webView.autoresizingMask = [.width, .height]
         webView.navigationDelegate = self
         webView.allowsBackForwardNavigationGestures = true
         contentView.addSubview(webView)
+
+        // Terminal toggle button (bottom-right)
+        terminalToggleButton = NSButton(frame: NSRect(x: 0, y: 0, width: 36, height: 36))
+        terminalToggleButton.bezelStyle = .circular
+        terminalToggleButton.title = ">_"
+        terminalToggleButton.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .bold)
+        terminalToggleButton.target = self
+        terminalToggleButton.action = #selector(toggleTerminal)
+        terminalToggleButton.toolTip = "Toggle Terminal (⌘T)"
+        terminalToggleButton.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(terminalToggleButton)
+
+        NSLayoutConstraint.activate([
+            terminalToggleButton.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+            terminalToggleButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -16),
+            terminalToggleButton.widthAnchor.constraint(equalToConstant: 36),
+            terminalToggleButton.heightAnchor.constraint(equalToConstant: 36)
+        ])
+
+        // Observe terminal panel close
+        NotificationCenter.default.addObserver(self, selector: #selector(handleTerminalClose(_:)),
+                                               name: NSNotification.Name("TerminalPanelClose"), object: nil)
 
         // Loading overlay
         loadingView = NSView(frame: contentView.bounds)
@@ -307,14 +350,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
 
     func loadN8nUI() {
         let port = serviceManager.readPort()
-        let url = URL(string: "http://localhost:\(port)")!
+        guard let url = URL(string: "http://127.0.0.1:\(port)") else {
+            updateStatus("Invalid port configuration")
+            return
+        }
+        allowedPort = port
         webView.load(URLRequest(url: url))
 
         // Hide loading overlay
         loadingView.isHidden = true
 
         let version = serviceManager.readVersion()
-        updateStatus("n8n v\(version) — localhost:\(port)")
+        updateStatus("n8n v\(version) — port \(port)")
 
         // Start status polling
         pollTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
@@ -330,9 +377,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
             let version = self.serviceManager.readVersion()
             DispatchQueue.main.async {
                 if ready {
-                    self.updateStatus("n8n v\(version) — localhost:\(port)")
+                    self.updateStatus("n8n v\(version) — port \(port)")
                 } else {
-                    self.updateStatus("n8n is not responding — localhost:\(port)")
+                    self.updateStatus("n8n is not responding — port \(port)")
                 }
             }
         }
@@ -343,6 +390,27 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     }
 
     // MARK: - WKNavigationDelegate
+
+    /// Restrict navigation to localhost only — block external URLs to prevent phishing.
+    /// Only applies to the main webView (not the terminal webView).
+    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        guard let url = navigationAction.request.url, let host = url.host else {
+            decisionHandler(.cancel)
+            return
+        }
+
+        // Allow only localhost / 127.0.0.1 on the configured port
+        let isLocalhost = (host == "127.0.0.1" || host == "localhost")
+        let isAllowedPort = (url.port == nil || url.port == allowedPort)
+
+        if isLocalhost && isAllowedPort {
+            decisionHandler(.allow)
+        } else {
+            // Open external URLs in the default browser instead
+            NSWorkspace.shared.open(url)
+            decisionHandler(.cancel)
+        }
+    }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
         updateStatus("Error: \(error.localizedDescription)")
@@ -453,13 +521,97 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     @objc func goForward(_ sender: Any?) {
         webView.goForward()
     }
+
+    // MARK: - Terminal panel
+
+    @objc func toggleTerminal(_ sender: Any?) {
+        guard let contentView = window.contentView else { return }
+
+        if terminalVisible, let panel = terminalPanel {
+            // Hide with slide-down animation
+            NSAnimationContext.runAnimationGroup({ ctx in
+                ctx.duration = 0.2
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                panel.animator().alphaValue = 0
+                var frame = panel.frame
+                frame.origin.y -= 20
+                panel.animator().frame = frame
+            }, completionHandler: {
+                panel.isHidden = true
+                panel.alphaValue = 1
+            })
+            terminalVisible = false
+            return
+        }
+
+        if let panel = terminalPanel {
+            // Show existing panel (PTY preserved)
+            panel.isHidden = false
+            panel.alphaValue = 0
+            let targetFrame = panel.frame
+            let startFrame = NSRect(x: targetFrame.origin.x, y: targetFrame.origin.y - 20,
+                                    width: targetFrame.width, height: targetFrame.height)
+            panel.frame = startFrame
+            NSAnimationContext.runAnimationGroup({ ctx in
+                ctx.duration = 0.2
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                panel.animator().alphaValue = 1
+                panel.animator().frame = targetFrame
+            })
+            terminalVisible = true
+            panel.refitTerminal()
+            return
+        }
+
+        // Check that terminal resources exist
+        guard let resourcePath = Bundle.main.resourcePath,
+              FileManager.default.fileExists(atPath: resourcePath + "/terminal-resources/terminal.html") else {
+            let alert = NSAlert()
+            alert.messageText = "Terminal Unavailable"
+            alert.informativeText = "Terminal resources not found in the app bundle."
+            alert.alertStyle = .warning
+            alert.runModal()
+            return
+        }
+
+        // Create new panel
+        let size = TerminalPanelView.defaultSize
+        let margin = TerminalPanelView.margin
+        let panelFrame = NSRect(
+            x: contentView.bounds.width - size.width - margin,
+            y: margin,
+            width: size.width,
+            height: size.height
+        )
+
+        let panel = TerminalPanelView(frame: panelFrame)
+        panel.autoresizingMask = [] // Manually positioned
+        contentView.addSubview(panel, positioned: .above, relativeTo: loadingView)
+
+        // Slide-up animation
+        panel.alphaValue = 0
+        let startFrame = NSRect(x: panelFrame.origin.x, y: panelFrame.origin.y - 20,
+                                width: panelFrame.width, height: panelFrame.height)
+        panel.frame = startFrame
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.2
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            panel.animator().alphaValue = 1
+            panel.animator().frame = panelFrame
+        })
+
+        panel.startTerminal()
+        self.terminalPanel = panel
+        self.terminalVisible = true
+    }
+
+    @objc func handleTerminalClose(_ notification: Notification) {
+        guard let panel = terminalPanel else { return }
+        panel.killTerminal()
+        panel.removeFromSuperview()
+        terminalPanel = nil
+        terminalVisible = false
+    }
 }
 
-// MARK: - Entry Point
-
-let app = NSApplication.shared
-let delegate = AppDelegate()
-app.delegate = delegate
-app.setActivationPolicy(.regular)
-app.activate(ignoringOtherApps: true)
-app.run()
+// Entry point is in main.swift
