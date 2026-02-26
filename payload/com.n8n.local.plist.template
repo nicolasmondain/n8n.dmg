@@ -45,6 +45,8 @@
         <string>true</string>
         <key>EXECUTIONS_DATA_MAX_AGE</key>
         <string>336</string>
+        <key>NODE_FUNCTION_ALLOW_BUILTIN</key>
+        <string>child_process,util</string>
     </dict>
 
     <key>StandardOutPath</key>

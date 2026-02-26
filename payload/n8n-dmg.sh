@@ -15,6 +15,12 @@ else
     N8N_PORT="${N8N_PORT:-5678}"
 fi
 
+# Validate port (防止 .port 文件被篡改导致命令注入)
+if ! [[ "$N8N_PORT" =~ ^[0-9]+$ ]] || (( N8N_PORT < 1 || N8N_PORT > 65535 )); then
+    echo "Error: invalid port value '${N8N_PORT}' in ${INSTALL_DIR}/.port" >&2
+    N8N_PORT=5678
+fi
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'

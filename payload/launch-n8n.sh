@@ -10,8 +10,13 @@ LOG_DIR="${INSTALL_DIR}/logs"
 LOG_FILE="${LOG_DIR}/n8n.log"
 LOG_MAX_SIZE_BYTES=$((50 * 1024 * 1024))  # 50MB
 
-# Ensure log directory exists
-mkdir -p "$LOG_DIR"
+# Ensure log directory exists with restrictive permissions
+mkdir -p -m 700 "$LOG_DIR"
+
+# Restrict log file permissions
+if [[ -f "$LOG_FILE" ]]; then
+    chmod 600 "$LOG_FILE"
+fi
 
 # Log rotation: if log exceeds 50MB, rotate to .old
 if [[ -f "$LOG_FILE" ]]; then
@@ -42,6 +47,17 @@ export DB_SQLITE_POOL_SIZE="${DB_SQLITE_POOL_SIZE:-4}"
 export N8N_USER_FOLDER="${N8N_USER_FOLDER:-${HOME}}"
 export EXECUTIONS_DATA_PRUNE="${EXECUTIONS_DATA_PRUNE:-true}"
 export EXECUTIONS_DATA_MAX_AGE="${EXECUTIONS_DATA_MAX_AGE:-336}"
+
+# Allow Code nodes to spawn processes (e.g. Claude Code CLI)
+export NODE_FUNCTION_ALLOW_BUILTIN="${NODE_FUNCTION_ALLOW_BUILTIN:-child_process,util,process}"
+
+# Load secrets (tokens, API keys) if the file exists
+SECRETS_FILE="${INSTALL_DIR}/secrets.env"
+if [[ -f "$SECRETS_FILE" ]]; then
+    set -a
+    source "$SECRETS_FILE"
+    set +a
+fi
 
 # exec replaces this shell so launchd tracks the correct PID
 exec "$NODE_BIN" "$N8N_BIN" start >> "$LOG_FILE" 2>&1

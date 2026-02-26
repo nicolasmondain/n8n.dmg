@@ -83,13 +83,12 @@ if [[ ! -f "$INSTALL_SCRIPT" ]]; then
     exit 1
 fi
 
-# Open Terminal and run the installer
-osascript << EOF
-tell application "Terminal"
-    activate
-    do script "clear && bash '${INSTALL_SCRIPT}'; exit"
-end tell
-EOF
+# Open Terminal and run the installer (pass path via env var to avoid AppleScript injection)
+export N8N_INSTALL_SCRIPT="${INSTALL_SCRIPT}"
+osascript -e 'tell application "Terminal"' \
+          -e 'activate' \
+          -e "do script \"clear && bash '\" & (system attribute \"N8N_INSTALL_SCRIPT\") & \"'; exit\"" \
+          -e 'end tell'
 LAUNCHER
 
 chmod +x "${MACOS_DIR}/launcher"

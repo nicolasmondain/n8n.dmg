@@ -54,7 +54,7 @@ download_node() {
     # Verify SHA256
     log "Verifying checksum for ${arch}..."
     local expected_sha
-    expected_sha=$(grep "${tarball}" "${tmp_dir}/SHASUMS256.txt" | awk '{print $1}')
+    expected_sha=$(grep -F "${tarball}" "${tmp_dir}/SHASUMS256.txt" | awk '{print $1}')
     if [[ -z "$expected_sha" ]]; then
         err "Could not find checksum for ${tarball}"
         exit 1

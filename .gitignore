@@ -2,3 +2,4 @@ build/
 dist/
 *.dmg
 .DS_Store
+.env

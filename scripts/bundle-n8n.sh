@@ -45,30 +45,29 @@ bundle_n8n() {
 
     # Use the arch-specific node/npm to install n8n
     # This ensures native modules are compiled for the correct architecture
-    local env_prefix=""
+    local env_prefix=()
     local host_arch
     host_arch=$(uname -m)
 
     # If we're on arm64 and building for x64, use Rosetta
     if [[ "$host_arch" == "arm64" && "$arch" == "x64" ]]; then
-        env_prefix="arch -x86_64"
+        env_prefix=(arch -x86_64)
     elif [[ "$host_arch" == "x86_64" && "$arch" == "arm64" ]]; then
         err "Cannot build arm64 binaries on x64 host"
         err "Build must run on Apple Silicon Mac"
         exit 1
     fi
 
-    $env_prefix "$node_bin" "$npm_bin" install \
+    "${env_prefix[@]+"${env_prefix[@]}"}" "$node_bin" "$npm_bin" install \
         --prefix "$n8n_dir" \
         "n8n@${N8N_VERSION}" \
         --no-fund \
-        --no-audit \
         --loglevel=warn
 
     # Verify installation
     log "Verifying n8n ${arch}..."
     local installed_version
-    installed_version=$($env_prefix "$node_bin" "${n8n_dir}/node_modules/.bin/n8n" --version 2>/dev/null || true)
+    installed_version=$("${env_prefix[@]+"${env_prefix[@]}"}" "$node_bin" "${n8n_dir}/node_modules/.bin/n8n" --version 2>/dev/null || true)
 
     if [[ -z "$installed_version" ]]; then
         err "n8n verification failed for ${arch} — could not get version"
