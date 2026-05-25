@@ -14,10 +14,15 @@
   }
   #terminal {
     width: 100%; height: 100%;
+    /* Even inner padding on all sides. Put it on the parent (not .xterm):
+       .xterm is an in-flow child so it's inset symmetrically, and FitAddon
+       sizes the grid from #terminal's content box. */
+    padding: 8px;
+    background-color: #1e1e2e;
   }
-  /* Inner padding so text isn't flush against the edges.
-     FitAddon reads padding from .xterm and adjusts cols/rows accordingly. */
-  .xterm { padding: 6px 10px; }
+  /* xterm hardcodes a black viewport background; match the theme so the
+     padding gutter never shows through as black. */
+  .xterm .xterm-viewport { background-color: #1e1e2e; }
   /* Hide scrollbar — xterm handles its own */
   .xterm-viewport::-webkit-scrollbar { display: none; }
 </style>
