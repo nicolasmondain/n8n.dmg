@@ -111,6 +111,12 @@ cat > "${CONTENTS}/Info.plist" << 'PLIST'
     <string>n8n — workflow automation</string>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>NSDocumentsFolderUsageDescription</key>
+    <string>n8n runs the commands you type in its built-in terminal, which may read files in this folder.</string>
+    <key>NSDesktopFolderUsageDescription</key>
+    <string>n8n runs the commands you type in its built-in terminal, which may read files in this folder.</string>
+    <key>NSDownloadsFolderUsageDescription</key>
+    <string>n8n runs the commands you type in its built-in terminal, which may read files in this folder.</string>
 </dict>
 </plist>
 PLIST
@@ -128,6 +134,16 @@ if [[ -d "$TERMINAL_RESOURCES" ]]; then
 else
     warn "Terminal resources not found at ${TERMINAL_RESOURCES} — terminal will be unavailable"
 fi
+
+# Code-sign the assembled bundle with a stable ad-hoc identity.
+# After lipo, the universal binary only carries per-arch linker signatures and
+# the bundle is left unsealed, so macOS TCC can't remember file-access grants
+# and re-prompts on every launch ("n8n.app would like to access Documents…").
+# Signing the whole bundle with a fixed identifier yields a consistent cdhash,
+# so the user grants each protected folder once and the choice sticks.
+log "  Signing app bundle (ad-hoc)..."
+codesign --force --sign - --identifier com.n8n.local.manager "$APP_DIR"
+codesign --verify --verbose=2 "$APP_DIR" 2>&1 | sed 's/^/    /' || warn "codesign verify reported issues"
 
 # Report binary info
 binary_size=$(du -sh "${MACOS}/N8nManager" | awk '{print $1}')
