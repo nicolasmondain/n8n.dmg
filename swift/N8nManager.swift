@@ -259,11 +259,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         webView.allowsBackForwardNavigationGestures = true
         contentView.addSubview(webView)
 
-        // Terminal toggle button (bottom-right)
-        terminalToggleButton = NSButton(frame: NSRect(x: 0, y: 0, width: 36, height: 36))
-        terminalToggleButton.bezelStyle = .circular
+        // Terminal toggle button (bottom-right): a white circle with a terminal icon.
+        let toggleSize: CGFloat = 40
+        terminalToggleButton = CircleIconButton(frame: NSRect(x: 0, y: 0, width: toggleSize, height: toggleSize))
+        terminalToggleButton.bezelStyle = .regularSquare
+        terminalToggleButton.isBordered = false
         terminalToggleButton.title = "🖥️"
-        terminalToggleButton.font = NSFont.systemFont(ofSize: 16)
+        terminalToggleButton.alignment = .center
+        terminalToggleButton.font = NSFont.systemFont(ofSize: 17)
+        terminalToggleButton.wantsLayer = true
+        terminalToggleButton.layer?.backgroundColor = NSColor.white.cgColor
+        terminalToggleButton.layer?.cornerRadius = toggleSize / 2
+        terminalToggleButton.layer?.shadowColor = NSColor.black.withAlphaComponent(0.3).cgColor
+        terminalToggleButton.layer?.shadowOffset = NSSize(width: 0, height: -1)
+        terminalToggleButton.layer?.shadowRadius = 4
+        terminalToggleButton.layer?.shadowOpacity = 1
         terminalToggleButton.target = self
         terminalToggleButton.action = #selector(toggleTerminal)
         terminalToggleButton.toolTip = "Toggle Terminal (⌘T)"
@@ -273,8 +283,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         NSLayoutConstraint.activate([
             terminalToggleButton.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
             terminalToggleButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -16),
-            terminalToggleButton.widthAnchor.constraint(equalToConstant: 36),
-            terminalToggleButton.heightAnchor.constraint(equalToConstant: 36)
+            terminalToggleButton.widthAnchor.constraint(equalToConstant: toggleSize),
+            terminalToggleButton.heightAnchor.constraint(equalToConstant: toggleSize)
         ])
 
         // Observe terminal panel close
@@ -618,6 +628,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         terminalPanel = nil
         terminalVisible = false
         terminalToggleButton.isHidden = false
+    }
+}
+
+/// A round, layer-backed button that shows the pointing-hand cursor on hover.
+final class CircleIconButton: NSButton {
+    override func resetCursorRects() {
+        addCursorRect(bounds, cursor: .pointingHand)
     }
 }
 
