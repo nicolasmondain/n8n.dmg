@@ -261,7 +261,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
 
         // Terminal toggle button (bottom-right): a white circle with a terminal icon.
         let toggleSize: CGFloat = 40
-        terminalToggleButton = CircleIconButton(frame: NSRect(x: 0, y: 0, width: toggleSize, height: toggleSize))
+        terminalToggleButton = PointerButton(frame: NSRect(x: 0, y: 0, width: toggleSize, height: toggleSize))
         terminalToggleButton.bezelStyle = .regularSquare
         terminalToggleButton.isBordered = false
         terminalToggleButton.title = "🖥️"
@@ -600,7 +600,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         )
 
         let panel = TerminalPanelView(frame: panelFrame)
-        panel.autoresizingMask = [] // Manually positioned
+        panel.autoresizingMask = [.minXMargin, .maxYMargin] // Stay pinned to the bottom-right on window resize
         contentView.addSubview(panel, positioned: .above, relativeTo: loadingView)
 
         // Slide-up animation
@@ -631,8 +631,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     }
 }
 
-/// A round, layer-backed button that shows the pointing-hand cursor on hover.
-final class CircleIconButton: NSButton {
+/// A button that shows the pointing-hand cursor on hover.
+final class PointerButton: NSButton {
     override func resetCursorRects() {
         addCursorRect(bounds, cursor: .pointingHand)
     }

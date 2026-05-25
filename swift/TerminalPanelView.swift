@@ -83,7 +83,7 @@ class TerminalPanelView: NSView, WKScriptMessageHandler, WKNavigationDelegate {
         ])
 
         // Close button
-        let closeBtn = NSButton(frame: .zero)
+        let closeBtn = PointerButton(frame: .zero)
         closeBtn.bezelStyle = .inline
         closeBtn.isBordered = false
         closeBtn.title = "\u{2715}" // ✕
@@ -333,6 +333,7 @@ class TerminalPanelView: NSView, WKScriptMessageHandler, WKNavigationDelegate {
         case .began:
             initialDragPoint = gesture.location(in: superview)
             initialFrame = self.frame
+            NSCursor.closedHand.push()
         case .changed:
             let current = gesture.location(in: superview)
             let dx = current.x - initialDragPoint.x
@@ -344,6 +345,8 @@ class TerminalPanelView: NSView, WKScriptMessageHandler, WKNavigationDelegate {
             newFrame.origin.x = max(0, min(newFrame.origin.x, superview.bounds.width - newFrame.width))
             newFrame.origin.y = max(0, min(newFrame.origin.y, superview.bounds.height - newFrame.height))
             self.frame = newFrame
+        case .ended, .cancelled, .failed:
+            NSCursor.pop()
         default:
             break
         }
@@ -397,5 +400,19 @@ class TerminalPanelView: NSView, WKScriptMessageHandler, WKNavigationDelegate {
 
     override func resetCursorRects() {
         addCursorRect(resizeHandle.frame, cursor: .crosshair)
+        // Grab cursor over the header so it's clear the panel can be dragged.
+        addCursorRect(titleBar.frame, cursor: .openHand)
+    }
+
+    // MARK: - Hit Testing
+
+    /// Claim every point inside the panel so clicks never fall through the
+    /// transparent web view to the n8n UI behind it.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        if let hit = super.hitTest(point) {
+            return hit
+        }
+        let local = convert(point, from: superview)
+        return bounds.contains(local) ? self : nil
     }
 }
