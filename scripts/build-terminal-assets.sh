@@ -29,7 +29,7 @@ mkdir -p "$XTERM_DIR"
 
 CDN_BASE="https://cdn.jsdelivr.net/npm"
 # addon-fit uses a different version scheme than @xterm/xterm
-XTERM_ADDON_FIT_VERSION="0.10.0"
+XTERM_ADDON_FIT_VERSION="0.11.0"
 
 curl -sfL "${CDN_BASE}/@xterm/xterm@${XTERM_JS_VERSION}/lib/xterm.js" \
     -o "${XTERM_DIR}/xterm.js"

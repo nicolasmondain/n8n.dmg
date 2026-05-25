@@ -2,8 +2,8 @@
 # config.sh — Central configuration for n8n DMG installer
 # All scripts source this file for shared constants.
 
-NODE_VERSION="22.16.0"
-N8N_VERSION="2.7.4"
+NODE_VERSION="22.22.3"
+N8N_VERSION="2.21.7"
 N8N_PORT=5678
 N8N_HOST="localhost"
 
@@ -32,7 +32,7 @@ N8N_SECURE_COOKIE="false"
 DB_SQLITE_POOL_SIZE=4
 
 # Terminal (xterm.js)
-XTERM_JS_VERSION="5.5.0"
+XTERM_JS_VERSION="6.0.0"
 
 # Log settings
 LOG_DIR="${INSTALL_DIR}/logs"
