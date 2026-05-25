@@ -68,6 +68,22 @@ globally so Claude can help build workflows in any project:
 See the [n8n-skills installation guide](https://github.com/czlonkowski/n8n-skills#-installation)
 for setup.
 
+### Connect Claude to your local n8n
+
+Let Claude query your running instance by registering the built-in n8n MCP server. The token
+lives in `.env` at the project root:
+
+```bash
+source .env
+claude mcp add --transport http n8n "$N8N_URL/mcp-server/http" \
+  --header "Authorization: $N8N_MCP_TOKEN" \
+  --scope user
+```
+
+Verify with `claude mcp list` (or `/mcp` inside a session) — it exposes `search_workflows`,
+`get_workflow_details`, and `execute_workflow`. These are read-and-execute only; creating or
+editing workflows uses the n8n REST API (`X-N8N-API-KEY`).
+
 ## More
 
 - [Building from source](docs/building.md)
