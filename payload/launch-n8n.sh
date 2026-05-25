@@ -49,7 +49,7 @@ export EXECUTIONS_DATA_PRUNE="${EXECUTIONS_DATA_PRUNE:-true}"
 export EXECUTIONS_DATA_MAX_AGE="${EXECUTIONS_DATA_MAX_AGE:-336}"
 
 # Allow Code nodes to spawn processes (e.g. Claude Code CLI)
-export NODE_FUNCTION_ALLOW_BUILTIN="${NODE_FUNCTION_ALLOW_BUILTIN:-child_process,util,process}"
+export NODE_FUNCTION_ALLOW_BUILTIN="${NODE_FUNCTION_ALLOW_BUILTIN:-child_process,util}"
 
 # Load secrets (tokens, API keys) if the file exists
 SECRETS_FILE="${INSTALL_DIR}/secrets.env"

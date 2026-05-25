@@ -4,7 +4,7 @@
 import Cocoa
 import WebKit
 
-class TerminalPanelView: NSView, WKScriptMessageHandler {
+class TerminalPanelView: NSView, WKScriptMessageHandler, WKNavigationDelegate {
 
     private var webView: WKWebView!
     private var titleBar: NSView!
@@ -113,6 +113,8 @@ class TerminalPanelView: NSView, WKScriptMessageHandler {
         config.userContentController.add(self, name: "terminal")
 
         webView = WKWebView(frame: .zero, configuration: config)
+        webView.navigationDelegate = self
+        webView.allowsBackForwardNavigationGestures = false
         webView.translatesAutoresizingMaskIntoConstraints = false
         webView.setValue(false, forKey: "drawsBackground") // transparent bg
         addSubview(webView)
@@ -212,6 +214,31 @@ class TerminalPanelView: NSView, WKScriptMessageHandler {
         default:
             break
         }
+    }
+
+    // MARK: - WKNavigationDelegate
+
+    /// Pin the terminal WebView to the bundled file:// page. Any attempt to navigate
+    /// away (remote URLs, other local files) is blocked, so the shell-bridging message
+    /// handler can never be driven by untrusted content.
+    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        guard let url = navigationAction.request.url else {
+            decisionHandler(.cancel)
+            return
+        }
+
+        // Only allow file:// URLs inside the bundled terminal-resources directory.
+        if url.isFileURL,
+           let resourcePath = Bundle.main.resourcePath {
+            let allowedDir = (resourcePath as NSString).appendingPathComponent("terminal-resources")
+            let standardized = (url.path as NSString).standardizingPath
+            if standardized == allowedDir || standardized.hasPrefix(allowedDir + "/") {
+                decisionHandler(.allow)
+                return
+            }
+        }
+
+        decisionHandler(.cancel)
     }
 
     // MARK: - PTY Setup
