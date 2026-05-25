@@ -47,6 +47,27 @@ Open the `.dmg` again and run **Install n8n.app**. The installer upgrades in pla
 
 Your workflow data (`~/.n8n/`) is preserved unless you choose to delete it.
 
+## Resources
+
+### Build workflows with AI
+
+[**n8n-skills**](https://github.com/czlonkowski/n8n-skills) by Romuald Członkowski — a set of
+Claude Code skills that teach Claude how to design and configure n8n workflows. Install them
+globally so Claude can help build workflows in any project:
+
+| Skill | What it helps with |
+|-------|--------------------|
+| `n8n-workflow-patterns` | Proven architectures: webhook, API, database, AI agent, batch, scheduled |
+| `n8n-node-configuration` | Operation-aware node setup — required fields and property dependencies |
+| `n8n-expression-syntax` | n8n expressions (`{{ }}`, `$json`/`$node`) and fixing common errors |
+| `n8n-code-javascript` | Writing JavaScript in Code nodes (`$input`/`$helpers`, loops, dates) |
+| `n8n-code-python` | Writing Python in Code nodes |
+| `n8n-validation-expert` | Reading and fixing validation errors and warnings |
+| `n8n-mcp-tools-expert` | Using the n8n MCP tools effectively |
+
+See the [n8n-skills installation guide](https://github.com/czlonkowski/n8n-skills#-installation)
+for setup.
+
 ## More
 
 - [Building from source](docs/building.md)
