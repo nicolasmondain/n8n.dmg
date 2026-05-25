@@ -262,8 +262,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         // Terminal toggle button (bottom-right)
         terminalToggleButton = NSButton(frame: NSRect(x: 0, y: 0, width: 36, height: 36))
         terminalToggleButton.bezelStyle = .circular
-        terminalToggleButton.title = ">_"
-        terminalToggleButton.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .bold)
+        terminalToggleButton.title = "🖥️"
+        terminalToggleButton.font = NSFont.systemFont(ofSize: 16)
         terminalToggleButton.target = self
         terminalToggleButton.action = #selector(toggleTerminal)
         terminalToggleButton.toolTip = "Toggle Terminal (⌘T)"
@@ -529,6 +529,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
 
         if terminalVisible, let panel = terminalPanel {
             // Hide with slide-down animation
+            // Reveal the toggle button as the panel slides away
+            terminalToggleButton.isHidden = false
+            terminalToggleButton.alphaValue = 0
             NSAnimationContext.runAnimationGroup({ ctx in
                 ctx.duration = 0.2
                 ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
@@ -536,6 +539,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
                 var frame = panel.frame
                 frame.origin.y -= 20
                 panel.animator().frame = frame
+                terminalToggleButton.animator().alphaValue = 1
             }, completionHandler: {
                 panel.isHidden = true
                 panel.alphaValue = 1
@@ -558,6 +562,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
                 panel.animator().alphaValue = 1
                 panel.animator().frame = targetFrame
             })
+            terminalToggleButton.isHidden = true
             terminalVisible = true
             panel.refitTerminal()
             return
@@ -603,6 +608,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         panel.startTerminal()
         self.terminalPanel = panel
         self.terminalVisible = true
+        terminalToggleButton.isHidden = true
     }
 
     @objc func handleTerminalClose(_ notification: Notification) {
@@ -611,6 +617,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         panel.removeFromSuperview()
         terminalPanel = nil
         terminalVisible = false
+        terminalToggleButton.isHidden = false
     }
 }
 
