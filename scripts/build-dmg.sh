@@ -98,36 +98,24 @@ cp -R "${PROJECT_ROOT}/${BUILD_DIR}/node-x64"   "${STAGING_DIR}/.node-x64"
 cp -R "${PROJECT_ROOT}/${BUILD_DIR}/n8n-arm64" "${STAGING_DIR}/.n8n-arm64"
 cp -R "${PROJECT_ROOT}/${BUILD_DIR}/n8n-x64"   "${STAGING_DIR}/.n8n-x64"
 
-# Calculate staging size for DMG sizing
-local_size=$(du -sm "$STAGING_DIR" | awk '{print $1}')
-# Add 20% headroom
-dmg_size=$(( local_size + local_size / 5 + 10 ))
-log "Staging directory: ${local_size}MB, DMG allocation: ${dmg_size}MB"
-
-# Create DMG
+# Create the DMG directly as a compressed, read-only image.
+# Let hdiutil auto-size from -srcfolder (no fixed -size): the previous
+# du-based estimate undercounted HFS+ overhead for n8n's 300k+ small files,
+# so the image ran out of room mid-copy and hdiutil failed with a misleading
+# "could not access <file>" error. No volume customization is needed, so a
+# single-step UDZO create replaces the old UDRW-then-convert dance.
 log "Creating DMG..."
 mkdir -p "${PROJECT_ROOT}/${DIST_DIR}"
 rm -f "$DMG_TEMP" "$DMG_OUTPUT"
 
-# Create read-write DMG first
 hdiutil create \
-    -size "${dmg_size}m" \
     -fs HFS+ \
     -volname "$DMG_VOLUME_NAME" \
     -srcfolder "$STAGING_DIR" \
-    -format UDRW \
-    -ov \
-    "$DMG_TEMP"
-
-# Convert to compressed read-only DMG
-log "Compressing DMG..."
-hdiutil convert \
-    "$DMG_TEMP" \
     -format UDZO \
     -imagekey zlib-level=9 \
-    -o "$DMG_OUTPUT"
-
-rm -f "$DMG_TEMP"
+    -ov \
+    "$DMG_OUTPUT"
 
 # Report
 local_final_size=$(du -sh "$DMG_OUTPUT" | awk '{print $1}')
