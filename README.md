@@ -76,7 +76,7 @@ lives in `.env` at the project root:
 ```bash
 source .env
 claude mcp add --transport http n8n "$N8N_URL/mcp-server/http" \
-  --header "Authorization: $N8N_MCP_TOKEN" \
+  --header "Authorization: Bearer $N8N_MCP_TOKEN" \
   --scope user
 ```
 

@@ -42,7 +42,7 @@ curl -s "$N8N_URL/api/v1/workflows" \
 curl -s -N -X POST "$N8N_URL/mcp-server/http" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
-  -H "Authorization: $N8N_MCP_TOKEN" \
+  -H "Authorization: Bearer $N8N_MCP_TOKEN" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"TOOL_NAME","arguments":{}}}'
 ```
 
