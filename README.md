@@ -68,6 +68,19 @@ globally so Claude can help build workflows in any project:
 See the [n8n-skills installation guide](https://github.com/czlonkowski/n8n-skills#-installation)
 for setup.
 
+### Environment variables
+
+API access is configured through a `.env` file at the project root:
+
+| Variable | Description |
+|----------|-------------|
+| `N8N_URL` | Base URL of your local n8n instance (e.g. `http://localhost:5678`) |
+| `N8N_API_KEY` | REST API key for full CRUD — create, update, and delete workflows and credentials (sent as the `X-N8N-API-KEY` header) |
+| `N8N_MCP_TOKEN` | Bearer token for the built-in MCP server — read-and-execute access (`search_workflows`, `get_workflow_details`, `execute_workflow`) |
+
+Generate the API key from **Settings → n8n API** in the n8n app, and the MCP token from the
+MCP server settings.
+
 ### Connect Claude to your local n8n
 
 Let Claude query your running instance by registering the built-in n8n MCP server. The token
