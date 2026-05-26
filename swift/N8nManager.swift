@@ -131,11 +131,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     var startupTimer: Timer?
     var allowedPort: Int = 5678
 
-    // Terminal panel
-    var terminalPanel: TerminalPanelView?
-    var terminalToggleButton: NSButton!
-    var terminalVisible = false
-
     // n8n pink
     let n8nPink = NSColor(red: 0.918, green: 0.294, blue: 0.443, alpha: 1.0)
 
@@ -188,8 +183,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         viewMenu.addItem(withTitle: "Reload", action: #selector(reloadPage), keyEquivalent: "r")
         viewMenu.addItem(withTitle: "Back", action: #selector(goBack), keyEquivalent: "[")
         viewMenu.addItem(withTitle: "Forward", action: #selector(goForward), keyEquivalent: "]")
-        viewMenu.addItem(NSMenuItem.separator())
-        viewMenu.addItem(withTitle: "Toggle Terminal", action: #selector(toggleTerminal), keyEquivalent: "t")
         viewMenuItem.submenu = viewMenu
         mainMenu.addItem(viewMenuItem)
 
@@ -258,38 +251,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         webView.navigationDelegate = self
         webView.allowsBackForwardNavigationGestures = true
         contentView.addSubview(webView)
-
-        // Terminal toggle button (bottom-right): a white circle with a terminal icon.
-        let toggleSize: CGFloat = 40
-        terminalToggleButton = PointerButton(frame: NSRect(x: 0, y: 0, width: toggleSize, height: toggleSize))
-        terminalToggleButton.bezelStyle = .regularSquare
-        terminalToggleButton.isBordered = false
-        terminalToggleButton.title = "🖥️"
-        terminalToggleButton.alignment = .center
-        terminalToggleButton.font = NSFont.systemFont(ofSize: 17)
-        terminalToggleButton.wantsLayer = true
-        terminalToggleButton.layer?.backgroundColor = NSColor.white.cgColor
-        terminalToggleButton.layer?.cornerRadius = toggleSize / 2
-        terminalToggleButton.layer?.shadowColor = NSColor.black.withAlphaComponent(0.3).cgColor
-        terminalToggleButton.layer?.shadowOffset = NSSize(width: 0, height: -1)
-        terminalToggleButton.layer?.shadowRadius = 4
-        terminalToggleButton.layer?.shadowOpacity = 1
-        terminalToggleButton.target = self
-        terminalToggleButton.action = #selector(toggleTerminal)
-        terminalToggleButton.toolTip = "Toggle Terminal (⌘T)"
-        terminalToggleButton.translatesAutoresizingMaskIntoConstraints = false
-        contentView.addSubview(terminalToggleButton)
-
-        NSLayoutConstraint.activate([
-            terminalToggleButton.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
-            terminalToggleButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -16),
-            terminalToggleButton.widthAnchor.constraint(equalToConstant: toggleSize),
-            terminalToggleButton.heightAnchor.constraint(equalToConstant: toggleSize)
-        ])
-
-        // Observe terminal panel close
-        NotificationCenter.default.addObserver(self, selector: #selector(handleTerminalClose(_:)),
-                                               name: NSNotification.Name("TerminalPanelClose"), object: nil)
 
         // Loading overlay
         loadingView = NSView(frame: contentView.bounds)
@@ -402,7 +363,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     // MARK: - WKNavigationDelegate
 
     /// Restrict navigation to localhost only — block external URLs to prevent phishing.
-    /// Only applies to the main webView (not the terminal webView).
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         guard let url = navigationAction.request.url, let host = url.host else {
             decisionHandler(.cancel)
@@ -530,111 +490,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
 
     @objc func goForward(_ sender: Any?) {
         webView.goForward()
-    }
-
-    // MARK: - Terminal panel
-
-    @objc func toggleTerminal(_ sender: Any?) {
-        guard let contentView = window.contentView else { return }
-
-        if terminalVisible, let panel = terminalPanel {
-            // Hide with slide-down animation
-            // Reveal the toggle button as the panel slides away
-            terminalToggleButton.isHidden = false
-            terminalToggleButton.alphaValue = 0
-            NSAnimationContext.runAnimationGroup({ ctx in
-                ctx.duration = 0.2
-                ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-                panel.animator().alphaValue = 0
-                var frame = panel.frame
-                frame.origin.y -= 20
-                panel.animator().frame = frame
-                terminalToggleButton.animator().alphaValue = 1
-            }, completionHandler: {
-                panel.isHidden = true
-                panel.alphaValue = 1
-            })
-            terminalVisible = false
-            return
-        }
-
-        if let panel = terminalPanel {
-            // Show existing panel (PTY preserved)
-            panel.isHidden = false
-            panel.alphaValue = 0
-            let targetFrame = panel.frame
-            let startFrame = NSRect(x: targetFrame.origin.x, y: targetFrame.origin.y - 20,
-                                    width: targetFrame.width, height: targetFrame.height)
-            panel.frame = startFrame
-            NSAnimationContext.runAnimationGroup({ ctx in
-                ctx.duration = 0.2
-                ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-                panel.animator().alphaValue = 1
-                panel.animator().frame = targetFrame
-            })
-            terminalToggleButton.isHidden = true
-            terminalVisible = true
-            panel.refitTerminal()
-            return
-        }
-
-        // Check that terminal resources exist
-        guard let resourcePath = Bundle.main.resourcePath,
-              FileManager.default.fileExists(atPath: resourcePath + "/terminal-resources/terminal.html") else {
-            let alert = NSAlert()
-            alert.messageText = "Terminal Unavailable"
-            alert.informativeText = "Terminal resources not found in the app bundle."
-            alert.alertStyle = .warning
-            alert.runModal()
-            return
-        }
-
-        // Create new panel
-        let size = TerminalPanelView.defaultSize
-        let margin = TerminalPanelView.margin
-        let panelFrame = NSRect(
-            x: contentView.bounds.width - size.width - margin,
-            y: margin,
-            width: size.width,
-            height: size.height
-        )
-
-        let panel = TerminalPanelView(frame: panelFrame)
-        panel.autoresizingMask = [.minXMargin, .maxYMargin] // Stay pinned to the bottom-right on window resize
-        contentView.addSubview(panel, positioned: .above, relativeTo: loadingView)
-
-        // Slide-up animation
-        panel.alphaValue = 0
-        let startFrame = NSRect(x: panelFrame.origin.x, y: panelFrame.origin.y - 20,
-                                width: panelFrame.width, height: panelFrame.height)
-        panel.frame = startFrame
-        NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = 0.2
-            ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-            panel.animator().alphaValue = 1
-            panel.animator().frame = panelFrame
-        })
-
-        panel.startTerminal()
-        self.terminalPanel = panel
-        self.terminalVisible = true
-        terminalToggleButton.isHidden = true
-    }
-
-    @objc func handleTerminalClose(_ notification: Notification) {
-        guard let panel = terminalPanel else { return }
-        panel.killTerminal()
-        panel.removeFromSuperview()
-        terminalPanel = nil
-        terminalVisible = false
-        terminalToggleButton.isHidden = false
-    }
-}
-
-/// A button that shows the pointing-hand cursor on hover.
-final class PointerButton: NSButton {
-    override func resetCursorRects() {
-        addCursorRect(bounds, cursor: .pointingHand)
     }
 }
 

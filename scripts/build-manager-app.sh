@@ -19,16 +19,12 @@ SWIFT_DIR="${PROJECT_ROOT}/swift"
 SWIFT_SOURCES=(
     "${SWIFT_DIR}/main.swift"
     "${SWIFT_DIR}/N8nManager.swift"
-    "${SWIFT_DIR}/TerminalManager.swift"
-    "${SWIFT_DIR}/TerminalPanelView.swift"
 )
-BRIDGING_HEADER="${SWIFT_DIR}/pty_shim.h"
 APP_DIR="${PROJECT_ROOT}/${BUILD_DIR}/n8n.app"
 CONTENTS="${APP_DIR}/Contents"
 MACOS="${CONTENTS}/MacOS"
 RESOURCES="${CONTENTS}/Resources"
 ICON_FILE="${PROJECT_ROOT}/${BUILD_DIR}/n8n.icns"
-TERMINAL_RESOURCES="${PROJECT_ROOT}/${BUILD_DIR}/terminal-resources"
 
 # Skip if already built
 if [[ -x "${MACOS}/N8nManager" ]]; then
@@ -43,11 +39,6 @@ for src in "${SWIFT_SOURCES[@]}"; do
     fi
 done
 
-if [[ ! -f "$BRIDGING_HEADER" ]]; then
-    warn "Bridging header not found: ${BRIDGING_HEADER}"
-    exit 1
-fi
-
 log "Compiling n8n Manager app..."
 
 # Prepare .app bundle
@@ -58,7 +49,6 @@ mkdir -p "$MACOS" "$RESOURCES"
 log "  Compiling arm64..."
 swiftc -O \
     -target arm64-apple-macosx12.0 \
-    -import-objc-header "$BRIDGING_HEADER" \
     -o "${PROJECT_ROOT}/${BUILD_DIR}/N8nManager-arm64" \
     "${SWIFT_SOURCES[@]}"
 
@@ -66,7 +56,6 @@ swiftc -O \
 log "  Compiling x86_64..."
 swiftc -O \
     -target x86_64-apple-macosx12.0 \
-    -import-objc-header "$BRIDGING_HEADER" \
     -o "${PROJECT_ROOT}/${BUILD_DIR}/N8nManager-x64" \
     "${SWIFT_SOURCES[@]}"
 
@@ -111,12 +100,6 @@ cat > "${CONTENTS}/Info.plist" << 'PLIST'
     <string>n8n — workflow automation</string>
     <key>NSHighResolutionCapable</key>
     <true/>
-    <key>NSDocumentsFolderUsageDescription</key>
-    <string>n8n runs the commands you type in its built-in terminal, which may read files in this folder.</string>
-    <key>NSDesktopFolderUsageDescription</key>
-    <string>n8n runs the commands you type in its built-in terminal, which may read files in this folder.</string>
-    <key>NSDownloadsFolderUsageDescription</key>
-    <string>n8n runs the commands you type in its built-in terminal, which may read files in this folder.</string>
 </dict>
 </plist>
 PLIST
@@ -127,20 +110,10 @@ if [[ -f "$ICON_FILE" ]]; then
     log "  Icon embedded"
 fi
 
-# Copy terminal resources
-if [[ -d "$TERMINAL_RESOURCES" ]]; then
-    cp -R "$TERMINAL_RESOURCES" "${RESOURCES}/terminal-resources"
-    log "  Terminal resources embedded"
-else
-    warn "Terminal resources not found at ${TERMINAL_RESOURCES} — terminal will be unavailable"
-fi
-
 # Code-sign the assembled bundle with a stable ad-hoc identity.
 # After lipo, the universal binary only carries per-arch linker signatures and
-# the bundle is left unsealed, so macOS TCC can't remember file-access grants
-# and re-prompts on every launch ("n8n.app would like to access Documents…").
-# Signing the whole bundle with a fixed identifier yields a consistent cdhash,
-# so the user grants each protected folder once and the choice sticks.
+# the bundle is left unsealed. Signing the whole bundle with a fixed identifier
+# yields a consistent cdhash, giving the app a stable identity across launches.
 log "  Signing app bundle (ad-hoc)..."
 codesign --force --sign - --identifier com.n8n.local.manager "$APP_DIR"
 codesign --verify --verbose=2 "$APP_DIR" 2>&1 | sed 's/^/    /' || warn "codesign verify reported issues"
