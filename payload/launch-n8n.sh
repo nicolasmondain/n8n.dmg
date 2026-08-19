@@ -51,6 +51,9 @@ export EXECUTIONS_DATA_MAX_AGE="${EXECUTIONS_DATA_MAX_AGE:-336}"
 # Allow Code nodes to spawn processes (e.g. Claude Code CLI)
 export NODE_FUNCTION_ALLOW_BUILTIN="${NODE_FUNCTION_ALLOW_BUILTIN:-child_process,util}"
 
+# Code node tasks may legitimately run long (headless Claude Code calls) — default runner timeout is 300s
+export N8N_RUNNERS_TASK_TIMEOUT="${N8N_RUNNERS_TASK_TIMEOUT:-3600}"
+
 # Load secrets (tokens, API keys) if the file exists
 SECRETS_FILE="${INSTALL_DIR}/secrets.env"
 if [[ -f "$SECRETS_FILE" ]]; then
