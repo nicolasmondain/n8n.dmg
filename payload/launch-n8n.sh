@@ -46,7 +46,11 @@ export N8N_SECURE_COOKIE="${N8N_SECURE_COOKIE:-false}"
 export DB_SQLITE_POOL_SIZE="${DB_SQLITE_POOL_SIZE:-4}"
 export N8N_USER_FOLDER="${N8N_USER_FOLDER:-${HOME}}"
 export EXECUTIONS_DATA_PRUNE="${EXECUTIONS_DATA_PRUNE:-true}"
-export EXECUTIONS_DATA_MAX_AGE="${EXECUTIONS_DATA_MAX_AGE:-336}"
+# 72h et non 336h : le @hourly écrit ~3.8MB de données par exécution (objets PR
+# bruts du repo entier sur plusieurs branches). À 14 jours la base atteint 1.2GB,
+# et le pruning lui-même finit par timeouter — « Database connection timed out »
+# puis 503 sur toute l'API. 3 jours suffisent pour diagnostiquer un run raté.
+export EXECUTIONS_DATA_MAX_AGE="${EXECUTIONS_DATA_MAX_AGE:-72}"
 
 # Allow Code nodes to spawn processes (e.g. Claude Code CLI)
 export NODE_FUNCTION_ALLOW_BUILTIN="${NODE_FUNCTION_ALLOW_BUILTIN:-child_process,util}"
