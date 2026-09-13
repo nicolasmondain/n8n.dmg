@@ -1,5 +1,9 @@
 # n8n for macOS
 
+> **Moved.** This project now lives in
+> [`nicolasmondain/event-manager-runtime`](https://github.com/nicolasmondain/event-manager-runtime)
+> (folder `n8n/`), with its full history. This repository is no longer updated.
+
 Run [n8n](https://n8n.io) locally on your Mac as a native app. No internet, no Homebrew, no sudo required.
 
 - Works on Apple Silicon and Intel Macs
